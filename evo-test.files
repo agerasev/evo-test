@@ -7,9 +7,9 @@ CMakeLists.txt
 libgenn-qt/include/genn/linkview.hpp
 libgenn-qt/include/genn/netview.hpp
 libgenn-qt/include/genn/nodeview.hpp
-libgenn-qt/libgenn/include/genn/gene.hpp
-libgenn-qt/libgenn/include/genn/mutator.hpp
-libgenn-qt/libgenn/include/genn/network.hpp
+libgenn-qt/libgenn/include/genn/genetics.hpp
+libgenn-qt/libgenn/include/genn/mutation.hpp
+libgenn-qt/libgenn/include/genn/instance.hpp
 libgenn-qt/libgenn/source/network.cpp
 libgenn-qt/libgenn/CMakeLists.txt
 libgenn-qt/libgenn/README.md

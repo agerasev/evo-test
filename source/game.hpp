@@ -11,7 +11,6 @@
 
 class Game {
 public:
-	bool done = true;
 	std::mutex mtx;
 	
 	double pos = 0;
@@ -30,16 +29,11 @@ public:
 		acc = 0;
 	}
 	
-	virtual void run() {
-		done = false;
-		int delay = 10;
-		while(!done) {
-			mtx.lock();
-			accel(1.0*sin(pos) - 0.1*vel);
-			move(1e-3*delay);
-			mtx.unlock();
-			std::this_thread::sleep_for(std::chrono::milliseconds(delay));
-		}
+	void step(double dt) {
+		mtx.lock();
+		accel(1.0*sin(pos) - 0.1*vel);
+		move(dt);
+		mtx.unlock();
 	}
 };
 
@@ -77,17 +71,17 @@ public:
 	void timer_func() {
 		int ms = 40;
 		update();
-		if(!done) {
+		if(!anim_done) {
 			QTimer::singleShot(ms, [this](){timer_func();});
 		}
 	}
 	
 	void startAnim() {
-		done = false;
+		anim_done = false;
 		timer_func();
 	}
 	
 	void stopAnim() {
-		done = true;
+		anim_done = true;
 	}
 };
