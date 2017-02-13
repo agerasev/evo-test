@@ -1,3 +1,5 @@
+evo-test.files
+evo-test.includes
 scripts/build.sh
 scripts/clean.sh
 scripts/make.bat

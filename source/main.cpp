@@ -14,83 +14,6 @@
 
 #include <game.hpp>
 
-class Organism {
-public:
-	NetworkMutable net;
-	INetwork inet;
-	double score = 0;
-	double fine = 0;
-	
-	Organism(const NetworkMutable &n) {
-		net = n;
-	}
-	
-	void build() {
-		inet.build(net);
-	}
-	
-	int mutate(Mutator *mut) {
-		return mut->mutate(&net);
-	}
-};
-
-class Selector {
-public:
-	std::vector<Organism*> orgs;
-	Mutator *mut;
-	double record = 0;
-	
-	Selector(int size, const Organism &org, Mutator *m) {
-		orgs.resize(size, nullptr);
-		for(int i = 0; i < size; ++i) {
-			orgs[i] = new Organism(org.net);
-			orgs[i]->build();
-		}
-		mut = m;
-	}
-	
-	~Selector() {
-		for(Organism *org : orgs) {
-			delete org;
-		}
-	}
-	
-	void select() {
-		double size_fine = 1e-4;
-		double new_bonus = 1e-3;
-		
-		int size = orgs.size();
-		std::sort(
-			orgs.begin(), orgs.end(), 
-			[](const Organism *o0, const Organism *o1) -> bool {
-				return o0->score + o0->fine > o1->score + o1->fine; 
-			}
-		);
-		record = orgs[0]->score;
-		
-		double dimf = 0.99;
-		for(int i = 0; i < size; ++i) {
-			orgs[i]->score *= dimf;
-			orgs[i]->fine *= dimf;
-			orgs[i]->fine -= size_fine*(orgs[i]->net.nodes.size() + orgs[i]->net.links.size());
-		}
-		
-		int hsize = size/2;
-		int shift = size - hsize;
-		for(int i = 0; i < hsize; ++i) {
-			Organism *&norg = orgs[i + shift];
-			delete norg;
-			norg = new Organism(orgs[i]->net);
-			norg->score = orgs[i]->score;
-			norg->fine += new_bonus*norg->mutate(mut);
-			norg->net.nodes[1].bias = 0.0;
-			norg->net.nodes[2].bias = 0.0;
-			norg->net.nodes[3].bias = 0.0;
-			norg->build();
-		}
-	}
-};
-
 class Window : public QWidget {
 public:
 	GameView *game;
@@ -114,22 +37,88 @@ public:
 	}
 };
 
+class Organism {
+public:
+	NetworkGene gene;
+	NetworkInst inst;
+	double score = 0.0;
+	
+	Organism(const NetworkGene &orig) {
+		gene = orig;
+	}
+	
+	void build() {
+		inst.build(gene);
+	}
+};
+
+class Selector {
+public:
+	std::vector<Organism*> orgs;
+	double record = 0.0;
+	
+	Selector(const NetworkGene &sample, int count) {
+		orgs.resize(count, nullptr);
+		for (Organism * &org : orgs) {
+			org = new Organism(sample);
+		}
+	}
+	
+	~Selector() {
+		for (auto org : orgs) {
+			delete org;
+		}
+	}
+	
+	void select(int ndrop) {
+		std::sort(
+			orgs.begin(), orgs.end(), 
+			[](const Organism *o0, const Organism *o1) -> bool {
+				return o0->score > o1->score; 
+			}
+		);
+		record = orgs[0]->score;
+		
+		if (ndrop > orgs.size()/2) {
+			ndrop = orgs.size()/2;
+		}
+		auto fi = orgs.begin();
+		auto ri = orgs.rbegin();
+		for (int i = 0; i < ndrop; ++i) {
+			delete *ri;
+			*ri = new Organism((*fi)->gene);
+		}
+	}
+	
+	void mutate(Mutator &mut, int ndrop) {
+		int nmut = orgs.size() - ndrop;
+		for (auto *org : orgs) {
+			mut.step_rand_weights(&org->gene, 1e-2);
+			org->build();
+			nmut -= 1;
+			if (nmut <= 0) {
+				break;
+			}
+		}
+	}
+};
+
 int main(int argc, char *argv[]) {
 	srand(87654321);
 	
 	RandEngine rand;
 	
-	NetworkMutable net;
-	net.nodes[NodeID(1)] = Node(0);
-	net.nodes[NodeID(2)] = Node(0);
-	net.nodes[NodeID(3)] = Node(0);
-	net.links[LinkID(1,3)] = Link(0);
-	net.links[LinkID(2,3)] = Link(0);
-	//net.links[LinkID(3,1)] = Link(rand.norm());
+	NetworkGene net;
+	net.nodes[NodeID(1)] = NodeGene(0);
+	net.nodes[NodeID(2)] = NodeGene(0);
+	net.nodes[NodeID(3)] = NodeGene(0);
+	net.links[LinkID(1,3)] = LinkGene(0);
+	net.links[LinkID(2,3)] = LinkGene(0);
+	// net.links[LinkID(3,1)] = Link(rand.norm());
 	
-	Organism org(net);
 	Mutator mut(3);
-	Selector sel(16, org, &mut);
+	
+	Selector sel(net, 8);
 	
 	QApplication app(argc, argv);
 	
@@ -148,40 +137,44 @@ int main(int argc, char *argv[]) {
 			// double dt = 1e-2;
 			// game->step(dt);
 			
+			int drop = 1;
 			for(int i = 0; i < int(sel.orgs.size()); ++i) {
 				Organism *org = sel.orgs[i];
-				INetwork &inet = org->inet;
+				org->build();
+				NetworkInst &inst = org->inst;
 				
-				int samp = 16;
+				int samp = 4;
 				double err = 0.0;
-				for(int j = 0; j < 16; ++j) {
-					int _in0 = rand.int_() % 2;
-					int _in1 = rand.int_() % 2;
+				for(int j = 0; j < samp; ++j) {
+					int _in0 = j % 2;
+					int _in1 = j / 2;
 					
-					int _out = (_in0 + _in1) % 2;
-					//int _out = _in0 || _in1;
+					int _out = (_in0 + _in1) % 2; // xor
+					// int _out = (_in0 + _in1) > 0; // or
+					// int _out = (_in0 + _in1) >= 2; // and
 					
 					double in0 = _in0 ? 0.9 : -0.9, in1 = _in1 ? 0.9 : -0.9, out = _out ? 0.9 : -0.9;
 					
 					int est = 8, tot = 16;
 					double lerr = 0.0;
 					for(int k = 0; k < tot; ++k) {
-						inet.nodes[0].in += in0;
-						inet.nodes[1].in += in1;
-						inet.step();
+						inst.nodes[0].in += in0;
+						inst.nodes[1].in += in1;
+						inst.step();
 						if(k > est) {
-							lerr -= fabs(out - inet.nodes[2].out);
+							lerr -= fabs(out - inst.nodes[2].out);
 						}
 					}
 					err = lerr/(tot - est);
-					org->inet.clear();
+					org->inst.clear();
 				}
 				org->score = err/samp;
 			}
 			
 			netview->connect(nullptr);
-			sel.select();
-			netview->connect(&sel.orgs[0]->net);
+			sel.select(drop);
+			sel.mutate(mut, drop);
+			netview->connect(&sel.orgs[0]->gene);
 			
 			if(cnt % 0x100 == 0) {
 				std::cout << sel.record << std::endl;
