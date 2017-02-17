@@ -79,7 +79,7 @@ public:
 		);
 		record = orgs[0]->score;
 		
-		if (ndrop > orgs.size()/2) {
+		if (ndrop > int(orgs.size())/2) {
 			ndrop = orgs.size()/2;
 		}
 		auto fi = orgs.begin();
@@ -109,12 +109,11 @@ int main(int argc, char *argv[]) {
 	RandEngine rand;
 	
 	NetworkGene net;
-	net.nodes[NodeID(1)] = NodeGene(0);
-	net.nodes[NodeID(2)] = NodeGene(0);
-	net.nodes[NodeID(3)] = NodeGene(0);
-	net.links[LinkID(1,3)] = LinkGene(0);
-	net.links[LinkID(2,3)] = LinkGene(0);
-	// net.links[LinkID(3,1)] = Link(rand.norm());
+	net.nodes.add(NodeID(1), NodeGene(0));
+	net.nodes.add(NodeID(2), NodeGene(0));
+	net.nodes.add(NodeID(3), NodeGene(0));
+	net.links.add(LinkID(1,3), LinkGene(0));
+	net.links.add(LinkID(2,3), LinkGene(0));
 	
 	Mutator mut(3);
 	
@@ -171,10 +170,9 @@ int main(int argc, char *argv[]) {
 				org->score = err/samp;
 			}
 			
-			netview->connect(nullptr);
 			sel.select(drop);
 			sel.mutate(mut, drop);
-			netview->connect(&sel.orgs[0]->gene);
+			netview->sync(sel.orgs[0]->gene);
 			
 			if(cnt % 0x100 == 0) {
 				std::cout << sel.record << std::endl;
