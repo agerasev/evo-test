@@ -22,7 +22,8 @@ libla/la/vec.hpp
 libla/readme.md
 source/game.hpp
 source/game.cpp
-libgenn-qt/source/nodeview.cpp
-libgenn-qt/source/linkview.cpp
 libgenn-qt/include/genn/common.hpp
-libgenn-qt/source/util.cpp
+libgenn-qt/source/common.cpp
+libgenn-qt/include/genn/plot.hpp
+libgenn-qt/source/plot.cpp
+libgenn-qt/include/genn/asyncanim.hpp

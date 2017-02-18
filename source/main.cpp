@@ -11,6 +11,7 @@
 #include <genn/instance.hpp>
 
 #include <genn/netview.hpp>
+#include <genn/plot.hpp>
 
 #include <game.hpp>
 
@@ -18,22 +19,31 @@ class Window : public QWidget {
 public:
 	GameView *game;
 	NetView *view;
+	Plot *fitness_plot;
 	
 	QHBoxLayout *layout;
 	
-	Window(GameView *g, NetView *v) 
-	: QWidget(), game(g), view(v) {
+	Window(GameView *g, NetView *v, Plot *fp) 
+	: QWidget(), game(g), view(v), fitness_plot(fp) {
 		resize(1200, 600);
 		setWindowTitle("Evo2048");
 		
 		layout = new QHBoxLayout;
 		layout->addWidget(game, 0);
 		layout->addWidget(view, 1);
+		layout->addWidget(fitness_plot, 1);
 		
 		setLayout(layout);
 		
-		game->startAnim();
-		view->startAnim();
+		game->anim_start();
+		view->anim_start();
+		fitness_plot->anim_start();
+	}
+	
+	virtual ~Window() {
+		game->anim_stop();
+		view->anim_stop();
+		fitness_plot->anim_stop();
 	}
 };
 
@@ -122,11 +132,12 @@ int main(int argc, char *argv[]) {
 	QApplication app(argc, argv);
 	
 	NetView *netview = new NetView();
-	// netview->connect(&net);
+	Plot *fitness_plot = new Plot(Plot::LOG_SCALE_Y);
+	int point_count = 0;
 	
 	GameView *game = new GameView(0.4);
 	
-	Window *window = new Window(game, netview);
+	Window *window = new Window(game, netview, fitness_plot);
 	window->show();
 	
 	bool done = false;
@@ -175,6 +186,8 @@ int main(int argc, char *argv[]) {
 			netview->sync(sel.orgs[0]->gene);
 			
 			if(cnt % 0x100 == 0) {
+				fitness_plot->add(point_count, -sel.record);
+				point_count += 1;
 				std::cout << sel.record << std::endl;
 			}
 			

@@ -9,6 +9,8 @@
 #include <QPainter>
 #include <QTimer>
 
+#include <genn/asyncanim.hpp>
+
 class Game {
 public:
 	std::mutex mtx;
@@ -37,11 +39,9 @@ public:
 	}
 };
 
-class GameView : public QWidget, public Game {
+class GameView : public QWidget, public Game, public AsyncAnim {
 	Q_OBJECT
 public:
-	bool anim_done = true;
-	
 	GameView(double p = 0) : QWidget(), Game(p) {
 		// setStyleSheet("background-color:#CDC0B4;");
 	}
@@ -68,20 +68,7 @@ public:
 		painter.drawEllipse(p, rs, rs);
 	}
 	
-	void timer_func() {
-		int ms = 40;
+	virtual void anim() override {
 		update();
-		if(!anim_done) {
-			QTimer::singleShot(ms, [this](){timer_func();});
-		}
-	}
-	
-	void startAnim() {
-		anim_done = false;
-		timer_func();
-	}
-	
-	void stopAnim() {
-		anim_done = true;
 	}
 };
