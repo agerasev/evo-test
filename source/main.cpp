@@ -1,8 +1,9 @@
 #include <iostream>
-#include <thread>
 #include <algorithm>
+#include <functional>
 
 #include <QApplication>
+#include <QThread>
 #include <QWidget>
 #include <QHBoxLayout>
 
@@ -13,35 +14,32 @@
 #include <genn/netview.hpp>
 #include <genn/plot.hpp>
 
-#include <game.hpp>
+#include <sampler.hpp>
 
 class Window : public QWidget {
+	Q_OBJECT
 public:
-	GameView *game;
 	NetView *view;
 	Plot *fitness_plot;
 	
 	QHBoxLayout *layout;
 	
-	Window(GameView *g, NetView *v, Plot *fp) 
-	: QWidget(), game(g), view(v), fitness_plot(fp) {
+	Window(NetView *v, Plot *fp) 
+	: QWidget(), view(v), fitness_plot(fp) {
 		resize(1200, 600);
 		setWindowTitle("Evo2048");
 		
 		layout = new QHBoxLayout;
-		layout->addWidget(game, 0);
 		layout->addWidget(view, 1);
 		layout->addWidget(fitness_plot, 1);
 		
 		setLayout(layout);
 		
-		game->anim_start();
 		view->anim_start();
 		fitness_plot->anim_start();
 	}
 	
 	virtual ~Window() {
-		game->anim_stop();
 		view->anim_stop();
 		fitness_plot->anim_stop();
 	}
@@ -49,45 +47,31 @@ public:
 
 class Organism {
 public:
-	NetworkGene gene;
 	NetworkInst inst;
 	double score = 0.0;
 	
 	Organism(const NetworkGene &orig) {
-		gene = orig;
-	}
-	
-	void build() {
-		inst.build(gene);
+		inst.build(orig);
 	}
 };
 
 class Selector {
 public:
-	std::vector<Organism*> orgs;
+	std::vector<Organism> orgs;
 	double record = 0.0;
 	
 	Selector(const NetworkGene &sample, int count) {
-		orgs.resize(count, nullptr);
-		for (Organism * &org : orgs) {
-			org = new Organism(sample);
-		}
-	}
-	
-	~Selector() {
-		for (auto org : orgs) {
-			delete org;
-		}
+		orgs.resize(count, Organism(sample));
 	}
 	
 	void select(int ndrop) {
 		std::sort(
 			orgs.begin(), orgs.end(), 
-			[](const Organism *o0, const Organism *o1) -> bool {
-				return o0->score > o1->score; 
+			[](const Organism &o0, const Organism &o1) -> bool {
+				return o0.score < o1.score;
 			}
 		);
-		record = orgs[0]->score;
+		record = orgs[0].score;
 		
 		if (ndrop > int(orgs.size())/2) {
 			ndrop = orgs.size()/2;
@@ -95,21 +79,31 @@ public:
 		auto fi = orgs.begin();
 		auto ri = orgs.rbegin();
 		for (int i = 0; i < ndrop; ++i) {
-			delete *ri;
-			*ri = new Organism((*fi)->gene);
+			ri->inst.load_from(fi->inst);
+			++fi;
+			++ri;
 		}
 	}
 	
 	void mutate(Mutator &mut, int ndrop) {
 		int nmut = orgs.size() - ndrop;
-		for (auto *org : orgs) {
-			mut.step_rand_weights(&org->gene, 1e-2);
-			org->build();
+		for (Organism &org : orgs) {
+			mut.step_rand_weights(&org.inst, 5e-3);
 			nmut -= 1;
 			if (nmut <= 0) {
 				break;
 			}
 		}
+	}
+};
+
+class Thread : public QThread {
+	Q_OBJECT
+public:
+	std::function<void()> func;
+	Thread(std::function<void()> fn) : func(fn) {}
+	virtual void run() override {
+		func();
 	}
 };
 
@@ -127,7 +121,8 @@ int main(int argc, char *argv[]) {
 	
 	Mutator mut(3);
 	
-	Selector sel(net, 8);
+	Selector sel(net, 32);
+	const int drop = 1;
 	
 	QApplication app(argc, argv);
 	
@@ -135,77 +130,44 @@ int main(int argc, char *argv[]) {
 	Plot *fitness_plot = new Plot(Plot::LOG_SCALE_Y);
 	int point_count = 0;
 	
-	GameView *game = new GameView(0.4);
+	Sampler samp;
 	
-	Window *window = new Window(game, netview, fitness_plot);
+	Window *window = new Window(netview, fitness_plot);
 	window->show();
 	
 	bool done = false;
-	std::thread thread([&](){
+	Thread thread([&](){
 		int cnt = 0;
 		while(!done) {
-			// double dt = 1e-2;
-			// game->step(dt);
-			
-			int drop = 1;
 			for(int i = 0; i < int(sel.orgs.size()); ++i) {
-				Organism *org = sel.orgs[i];
-				org->build();
-				NetworkInst &inst = org->inst;
-				
-				int samp = 4;
-				double err = 0.0;
-				for(int j = 0; j < samp; ++j) {
-					int _in0 = j % 2;
-					int _in1 = j / 2;
-					
-					int _out = (_in0 + _in1) % 2; // xor
-					// int _out = (_in0 + _in1) > 0; // or
-					// int _out = (_in0 + _in1) >= 2; // and
-					
-					double in0 = _in0 ? 0.9 : -0.9, in1 = _in1 ? 0.9 : -0.9, out = _out ? 0.9 : -0.9;
-					
-					int est = 8, tot = 16;
-					double lerr = 0.0;
-					for(int k = 0; k < tot; ++k) {
-						inst.nodes[0].in += in0;
-						inst.nodes[1].in += in1;
-						inst.step();
-						if(k > est) {
-							lerr -= fabs(out - inst.nodes[2].out);
-						}
-					}
-					err = lerr/(tot - est);
-					org->inst.clear();
-				}
-				org->score = err/samp;
+				Organism &org = sel.orgs[i];
+				org.score = samp.sample(&org.inst);
 			}
 			
 			sel.select(drop);
+			sel.orgs[0].inst.upload(&net);
 			sel.mutate(mut, drop);
-			netview->sync(sel.orgs[0]->gene);
 			
-			if(cnt % 0x100 == 0) {
-				fitness_plot->add(point_count, -sel.record);
+			if(cnt % 0x40 == 0) {
+				netview->sync(net);
+				fitness_plot->add(point_count, sel.record);
 				point_count += 1;
 				std::cout << sel.record << std::endl;
 			}
 			
-			/*
-			std::this_thread::sleep_for(
-				std::chrono::microseconds(int(1e6*dt))
-			);
-			*/
 			cnt += 1;
 		}
 	});
-
+	thread.start();
+	
 	int rs = app.exec();
 
 	done = true;
-	thread.join();
+	thread.wait();
 	
-	delete window;
+	// delete window;
 	
 	return rs;
 }
+
+#include "main.moc"

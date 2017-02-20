@@ -25,7 +25,7 @@ include_directories(${LIBGENN_QT})
 set(LIBS ${LIBS} genn-qt)
 
 include_directories(source)
-set(SOURCE source/main.cpp source/game.cpp)
+set(SOURCE source/main.cpp)
 
 add_executable(${PROJECT_NAME} ${SOURCE})
 

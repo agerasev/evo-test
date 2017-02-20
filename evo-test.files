@@ -20,10 +20,11 @@ libgenn-qt/CMakeLists.txt
 libla/la/mat.hpp
 libla/la/vec.hpp
 libla/readme.md
-source/game.hpp
-source/game.cpp
+source/sampler.hpp
 libgenn-qt/include/genn/common.hpp
 libgenn-qt/source/common.cpp
 libgenn-qt/include/genn/plot.hpp
 libgenn-qt/source/plot.cpp
 libgenn-qt/include/genn/asyncanim.hpp
+libgenn-qt/libgenn/include/genn/random.hpp
+source/species.hpp
